@@ -15,13 +15,13 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 const roleIcons = {
-  "Thần Tương": "🔮",
-  "Cửu Linh": "🐺",
-  "Thiết Y": "🛡️",
-  "Tố Vấn": "🌿",
-  "Huyết Hà": "🔥",
-  "Long Ngâm": "⚔️",
-  "Toái Mộng": "🥷"
+  "Thần Tương": "1492043620147265589",
+  "Cửu Linh": "1492043735041573025",
+  "Thiết Y": "1492043702313549904",
+  "Tố Vấn": "1492043581459009657",
+  "Huyết Hà": "1492043637457158225",
+  "Long Ngâm": "1492043601058730085",
+  "Toái Mộng": "1492043735041573025"
 };
 
 let phaiData = {};
