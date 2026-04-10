@@ -7,37 +7,37 @@ const GUILD_ID = "1356614313896312864";
 const commands = [
   new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("Tạo role phái"),
+    .setDescription("Tạo role phái + màu"),
 
   new SlashCommandBuilder()
     .setName("phai")
-    .setDescription("Tạo bảng chọn phái"),
+    .setDescription("Chọn phái"),
+
+  new SlashCommandBuilder()
+    .setName("mau")
+    .setDescription("Chọn màu tên"),
 
   new SlashCommandBuilder()
     .setName("vote")
-    .setDescription("Tạo vote mới")
-    .addStringOption(option =>
-      option.setName("noidung")
-        .setDescription("Nội dung vote")
-        .setRequired(true)
+    .setDescription("Tạo vote")
+    .addStringOption(o =>
+      o.setName("noidung").setDescription("Nội dung").setRequired(true)
     )
-    .addNumberOption(option =>
-      option.setName("thoigian")
-        .setDescription("Thời gian vote (giờ)")
-        .setRequired(false)
+    .addNumberOption(o =>
+      o.setName("thoigian").setDescription("Giờ").setRequired(false)
     )
 ].map(c => c.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
   try {
-    console.log("Đang đăng ký lệnh...");
+    console.log("Đang deploy...");
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log("Đã đăng ký lệnh xong!");
+    console.log("Done deploy!");
   } catch (err) {
     console.error(err);
   }
