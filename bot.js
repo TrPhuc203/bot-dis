@@ -14,10 +14,9 @@ const client = new Client({
   ]
 });
 
-// 🔑 TOKEN
 const TOKEN = process.env.TOKEN;
 
-// 🎭 Emoji phái (đổi lại ID emoji server của bạn)
+// 🎭 Emoji phái
 const roleIcons = {
   "Thần Tương": "<:thantuong:1234567890>",
   "Cửu Linh": "<:cuulinh:1234567890>",
@@ -39,12 +38,12 @@ const roleEmbedColors = {
   "Toái Mộng": 0x00e6e6
 };
 
-// 🚀 Khi bot sẵn sàng
-client.once('ready', () => {
-  console.log(`✅ Bot đã đăng nhập: ${client.user.tag}`);
+// ✅ FIX READY EVENT (KHÔNG WARNING)
+client.once('ready', (c) => {
+  console.log(`✅ Bot đã đăng nhập: ${c.user.tag}`);
 });
 
-// 📌 Lệnh /phai (tạo bảng chọn phái)
+// 📌 INTERACTION
 client.on('interactionCreate', async interaction => {
 
   // ===== /phai =====
@@ -55,19 +54,17 @@ client.on('interactionCreate', async interaction => {
         .setCustomId(`phai_${name}`)
         .setLabel(name)
         .setEmoji(roleIcons[name])
-        .setStyle(ButtonStyle.Secondary) // ⚪ tất cả xám
+        .setStyle(ButtonStyle.Secondary) // ⚪ xám toàn bộ
     );
 
     const rows = [];
     for (let i = 0; i < buttons.length; i += 5) {
-      rows.push(
-        new ActionRowBuilder().addComponents(buttons.slice(i, i + 5))
-      );
+      rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
     }
 
     const embed = new EmbedBuilder()
       .setTitle("🎮 Chọn Phái")
-      .setDescription("Bấm vào nút bên dưới để chọn phái của bạn")
+      .setDescription("Bấm nút bên dưới để chọn phái của bạn")
       .setColor(0x2b2d31);
 
     await interaction.reply({
