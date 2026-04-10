@@ -74,7 +74,7 @@ async function getName(guild, id) {
 }
 
 // ================= READY =================
-client.once("ready", (c) => {
+client.once("clientReady", (c) => {
   console.log(`Bot online: ${c.user.tag}`);
 });
 
@@ -83,7 +83,7 @@ async function buildPhaiEmbed(guild) {
   let desc = "";
 
   for (let role in roleIcons) {
-    const list = [...new Set(phaiData[role] || [])];
+    const list = [...new Set((phaiData[role] || []).filter(Boolean))];
     const names = await Promise.all(list.map(id => getName(guild, id)));
 
     desc += `\n${roleIcons[role]} **${role} (${list.length})**\n`;
@@ -97,13 +97,33 @@ async function buildPhaiEmbed(guild) {
     .setDescription(desc);
 }
 
-// ================= EMBED VOTE =================
+// ================= UPDATE EMBED =================
+async function updatePhai(channel, guild) {
+  try {
+    const msgs = await channel.messages.fetch({ limit: 50 });
+    const phaiMsg = msgs.find(m => m.embeds[0]?.title === "🎮 Chọn phái");
+    if (!phaiMsg) return;
+
+    await phaiMsg.edit({
+      embeds: [await buildPhaiEmbed(guild)]
+    });
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ================= VOTE =================
+async function getNameSafe(guild, id) {
+  return getName(guild, id);
+}
+
 async function buildVoteEmbed(guild, data, content) {
   const yes = [], no = [], unknown = [];
 
   for (let id in data) {
     const info = data[id];
-    const name = await getName(guild, id);
+    const name = await getNameSafe(guild, id);
 
     const icon = roleIcons[info.role] || "❔";
     const text = `${icon} ${name}`;
@@ -127,7 +147,7 @@ async function buildVoteEmbed(guild, data, content) {
 // ================= INTERACTION =================
 client.on("interactionCreate", async (interaction) => {
 
-  // ========== SETUP ==========
+  // ===== SETUP =====
   if (interaction.isChatInputCommand() && interaction.commandName === "setup") {
 
     await interaction.deferReply({ flags: 64 });
@@ -154,7 +174,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.editReply("✅ Setup xong phái + màu");
   }
 
-  // ========== PHÁI ==========
+  // ===== PHÁI =====
   if (interaction.isChatInputCommand() && interaction.commandName === "phai") {
 
     const buttons = Object.keys(roleIcons).map(name =>
@@ -175,7 +195,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ========== MÀU ==========
+  // ===== MÀU =====
   if (interaction.isChatInputCommand() && interaction.commandName === "mau") {
 
     const buttons = Object.keys(colorRoles).map(name =>
@@ -201,11 +221,10 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ========== VOTE ==========
+  // ===== VOTE =====
   if (interaction.isChatInputCommand() && interaction.commandName === "vote") {
 
     const content = interaction.options.getString("noidung");
-    const durationMs = (interaction.options.getNumber("thoigian") || 1) * 3600000;
 
     await interaction.deferReply();
 
@@ -230,7 +249,7 @@ client.on("interactionCreate", async (interaction) => {
     interaction.deleteReply().catch(() => {});
   }
 
-  // ========== BUTTON ==========
+  // ===== BUTTON =====
   if (!interaction.isButton()) return;
 
   const userId = interaction.user.id;
@@ -238,46 +257,56 @@ client.on("interactionCreate", async (interaction) => {
 
   await interaction.deferUpdate();
 
-  // PHÁI
+  // ===== PHÁI =====
   if (interaction.customId.startsWith("phai_")) {
 
     const roleName = interaction.customId.replace("phai_", "");
     const member = await guild.members.fetch(userId);
 
     setImmediate(async () => {
+      try {
 
-      for (let r in phaiData) {
-        phaiData[r] = (phaiData[r] || []).filter(id => id !== userId);
+        // remove phái cũ
+        for (let r in phaiData) {
+          phaiData[r] = (phaiData[r] || []).filter(id => id !== userId);
 
-        const oldRole = guild.roles.cache.find(x => x.name === r);
-        if (oldRole) await member.roles.remove(oldRole).catch(() => {});
+          const oldRole = guild.roles.cache.find(x => x.name === r);
+          if (oldRole) await member.roles.remove(oldRole).catch(() => {});
+        }
+
+        // add phái mới
+        const newRole = guild.roles.cache.find(r => r.name === roleName);
+        if (newRole) await member.roles.add(newRole).catch(() => {});
+
+        await member.fetch(true).catch(() => {});
+
+        if (!phaiData[roleName]) phaiData[roleName] = [];
+        if (!phaiData[roleName].includes(userId)) {
+          phaiData[roleName].push(userId);
+        }
+
+        saveData();
+
+        await updatePhai(interaction.channel, guild);
+
+      } catch (e) {
+        console.error(e);
       }
-
-      const newRole = guild.roles.cache.find(r => r.name === roleName);
-      if (newRole) await member.roles.add(newRole).catch(() => {});
-
-      if (!phaiData[roleName]) phaiData[roleName] = [];
-      phaiData[roleName].push(userId);
-
-      saveData();
     });
 
     return;
   }
 
-  // MÀU
+  // ===== MÀU =====
   if (interaction.customId.startsWith("color_")) {
 
     const colorName = interaction.customId.replace("color_", "");
     const member = await guild.members.fetch(userId);
 
     setImmediate(async () => {
-
       for (let c in colorRoles) {
         const role = guild.roles.cache.find(r => r.name === c);
-        if (role && member.roles.cache.has(role.id)) {
-          await member.roles.remove(role).catch(() => {});
-        }
+        if (role) await member.roles.remove(role).catch(() => {});
       }
 
       const newRole = guild.roles.cache.find(r => r.name === colorName);
@@ -287,22 +316,16 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // VOTE
+  // ===== VOTE =====
   if (interaction.customId.startsWith("vote_")) {
 
     const status = interaction.customId.split("_")[1];
     const vote = voteMessages[interaction.message.id];
     if (!vote) return;
 
-    setImmediate(async () => {
-      vote.data[userId] = vote.data[userId] || { role: null, status: "unknown" };
+    setImmediate(() => {
+      vote.data[userId] = vote.data[userId] || {};
       vote.data[userId].status = status;
-
-      for (let r in phaiData) {
-        if ((phaiData[r] || []).includes(userId)) {
-          vote.data[userId].role = r;
-        }
-      }
     });
 
     return;
