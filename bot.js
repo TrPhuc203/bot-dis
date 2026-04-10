@@ -8,7 +8,7 @@ const {
   ButtonStyle,
   EmbedBuilder,
   PermissionsBitField
-} = require('discord.js');
+} = require("discord.js");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
@@ -17,28 +17,17 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 // ================= FILE STORAGE =================
-const PHAI_FILE = "./phaiData.json";
 const VOTE_FILE = "./voteData.json";
-
-// load data
-let phaiData = fs.existsSync(PHAI_FILE)
-  ? JSON.parse(fs.readFileSync(PHAI_FILE, "utf8"))
-  : {};
 
 let voteMessages = fs.existsSync(VOTE_FILE)
   ? JSON.parse(fs.readFileSync(VOTE_FILE, "utf8"))
   : {};
 
-// save functions
-function savePhai() {
-  fs.writeFileSync(PHAI_FILE, JSON.stringify(phaiData, null, 2));
-}
-
 function saveVote() {
   fs.writeFileSync(VOTE_FILE, JSON.stringify(voteMessages, null, 2));
 }
 
-// ================= EMOJI PHÁI =================
+// ================= ROLE ICONS =================
 const roleIcons = {
   "Thần Tương": "<:thantuong:1492043620147265589>",
   "Cửu Linh": "<:cuulinh:1492043735041573025>",
@@ -59,18 +48,21 @@ async function getName(guild, id) {
   }
 }
 
-// ================= PHÁI EMBED =================
+// ================= PHÁI (FIX: LẤY TRỰC TIẾP ROLE DISCORD) =================
 async function buildPhaiEmbed(guild) {
   let desc = "";
 
-  for (let role in roleIcons) {
-    const list = [...new Set(phaiData[role] || [])];
+  for (let roleName in roleIcons) {
+    const role = guild.roles.cache.find(r => r.name === roleName);
 
-    desc += `\n${roleIcons[role]} **${role} (${list.length})**\n`;
+    if (!role) continue;
 
-    if (list.length) {
-      const names = await Promise.all(list.map(id => getName(guild, id)));
-      desc += names.map(n => `➤ ${n}`).join("\n");
+    const members = role.members.map(m => m);
+
+    desc += `\n${roleIcons[roleName]} **${roleName} (${members.length})**\n`;
+
+    if (members.length) {
+      desc += members.map(m => `➤ ${m.displayName}`).join("\n");
     } else {
       desc += "_Chưa có ai_";
     }
@@ -85,18 +77,20 @@ async function buildPhaiEmbed(guild) {
 }
 
 // ================= VOTE EMBED =================
-async function buildVoteEmbed(guild, voteData, content) {
+async function buildVoteEmbed(guild, vote) {
   const yes = [];
   const no = [];
   const unknown = [];
 
-  for (let userId in voteData) {
-    const info = voteData[userId];
+  const data = vote.data || {};
 
-    const role = info.role || "Chưa chọn";
-    const icon = roleIcons[role] || "❔";
-    const name = await getName(guild, userId);
+  for (let userId in data) {
+    const info = data[userId];
 
+    const member = await guild.members.fetch(userId).catch(() => null);
+    const name = member ? member.displayName : "Unknown";
+
+    const icon = roleIcons[info.role] || "❔";
     const text = `${icon} ${name}`;
 
     if (info.status === "yes") yes.push(text);
@@ -107,18 +101,35 @@ async function buildVoteEmbed(guild, voteData, content) {
   return new EmbedBuilder()
     .setTitle("📊 VOTE")
     .setColor("#ff9900")
-    .setDescription(`📝 **Nội dung:** ${content}`)
+    .setDescription(`📝 **Nội dung:** ${vote.content}`)
     .addFields(
-      { name: `✅ Tham gia (${yes.length})`, value: yes.join("\n") || "_Trống_", inline: true },
-      { name: `❌ Không (${no.length})`, value: no.join("\n") || "_Trống_", inline: true },
-      { name: `❓ Chưa biết (${unknown.length})`, value: unknown.join("\n") || "_Trống_", inline: true }
-    )
-    .setFooter({ text: `Tổng vote: ${Object.keys(voteData).length}` });
+      { name: `✅ Tham gia`, value: yes.join("\n") || "_Trống_", inline: true },
+      { name: `❌ Không`, value: no.join("\n") || "_Trống_", inline: true },
+      { name: `❓ Chưa biết`, value: unknown.join("\n") || "_Trống_", inline: true }
+    );
 }
 
 // ================= READY =================
-client.once("ready", () => {
+client.once("ready", async () => {
   console.log(`Bot online: ${client.user.tag}`);
+
+  // 🔥 RESTORE VOTE SAU RESTART
+  for (let msgId in voteMessages) {
+    const vote = voteMessages[msgId];
+
+    try {
+      const guild = await client.guilds.fetch(vote.guildId);
+      const channel = guild.channels.cache.get(vote.channelId);
+      const msg = await channel.messages.fetch(msgId);
+
+      await msg.edit({
+        embeds: [await buildVoteEmbed(guild, vote)]
+      });
+
+    } catch (err) {
+      console.log("Skip restore vote:", err.message);
+    }
+  }
 });
 
 // ================= UPDATE PHÁI =================
@@ -130,6 +141,7 @@ async function updatePhai(channel, guild) {
 
     const messages = await channel.messages.fetch({ limit: 50 });
     const phaiMsg = messages.find(m => m.embeds[0]?.title === "🎮 Chọn phái");
+
     if (!phaiMsg) return;
 
     await phaiMsg.edit({
@@ -151,7 +163,7 @@ async function updateVote(msgId, guild) {
     const msg = await channel.messages.fetch(msgId);
 
     await msg.edit({
-      embeds: [await buildVoteEmbed(guild, vote.data, vote.content)]
+      embeds: [await buildVoteEmbed(guild, vote)]
     });
 
   } catch (err) {
@@ -207,10 +219,8 @@ client.on("interactionCreate", async interaction => {
     const content = interaction.options.getString("noidung");
     const durationHours = interaction.options.getNumber("thoigian") || 1;
 
-    await interaction.deferReply();
-
     const msg = await interaction.channel.send({
-      embeds: [await buildVoteEmbed(interaction.guild, {}, content)],
+      embeds: [await buildVoteEmbed(interaction.guild, { content, data: {} })],
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId("vote_yes").setStyle(ButtonStyle.Success).setLabel("✅ Tham gia"),
@@ -229,8 +239,6 @@ client.on("interactionCreate", async interaction => {
     };
 
     saveVote();
-
-    interaction.deleteReply().catch(() => {});
 
     setTimeout(async () => {
       try {
@@ -264,34 +272,25 @@ client.on("interactionCreate", async interaction => {
       setImmediate(async () => {
         try {
 
-          // xóa role cũ
-          for (let r in phaiData) {
-            phaiData[r] = (phaiData[r] || []).filter(id => id !== userId);
-
-            const oldRole = guild.roles.cache.find(x => x.name === r);
-            if (oldRole) {
-              await member.roles.remove(oldRole).catch(() => {});
-            }
+          // remove old roles
+          for (let r in roleIcons) {
+            const role = guild.roles.cache.find(x => x.name === r);
+            if (role) await member.roles.remove(role).catch(() => {});
           }
 
-          // thêm role mới
+          // add new role
           const newRole = guild.roles.cache.find(r => r.name === roleName);
           if (newRole) await member.roles.add(newRole).catch(() => {});
 
-          if (!phaiData[roleName]) phaiData[roleName] = [];
-
-          if (!phaiData[roleName].includes(userId)) {
-            phaiData[roleName].push(userId);
-          }
-
-          savePhai();
-
           await updatePhai(interaction.channel, guild);
 
+          // sync vote role
           for (let msgId in voteMessages) {
             const vote = voteMessages[msgId];
-            if (vote.data[userId]) vote.data[userId].role = roleName;
-            await updateVote(msgId, guild);
+            if (vote.data[userId]) {
+              vote.data[userId].role = roleName;
+              await updateVote(msgId, guild);
+            }
           }
 
           saveVote();
@@ -317,8 +316,10 @@ client.on("interactionCreate", async interaction => {
         vote.data[userId] = vote.data[userId] || { role: null, status: "unknown" };
         vote.data[userId].status = status;
 
-        for (let r in phaiData) {
-          if ((phaiData[r] || []).includes(userId)) {
+        // lấy role từ discord
+        for (let r in roleIcons) {
+          const role = guild.roles.cache.find(x => x.name === r);
+          if (role?.members.has(userId)) {
             vote.data[userId].role = r;
           }
         }
