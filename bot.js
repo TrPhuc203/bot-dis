@@ -60,15 +60,19 @@ async function getName(guild, id) {
 // ================= PHÁI EMBED =================
 async function buildPhaiEmbed(guild) {
   let desc = "";
+
   for (let role in roleIcons) {
     const list = phaiData[role] || [];
+
     desc += `\n${roleIcons[role]} **${role} (${list.length})**\n`;
+
     if (list.length) {
       const names = await Promise.all(list.map(id => getName(guild, id)));
       desc += names.map(n => `➤ ${n}`).join("\n");
     } else {
       desc += "_Chưa có ai_";
     }
+
     desc += "\n";
   }
 
@@ -78,18 +82,17 @@ async function buildPhaiEmbed(guild) {
     .setDescription(desc);
 }
 
-// ================= VOTE EMBED =================
+// ================= VOTE =================
 async function buildVoteEmbed(guild, voteData, content) {
   const yes = [], no = [], unknown = [];
 
   for (let userId in voteData) {
-    const info = voteData[userId];
     const name = await getName(guild, userId);
 
     const text = `👤 ${name}`;
 
-    if (info.status === "yes") yes.push(text);
-    else if (info.status === "no") no.push(text);
+    if (voteData[userId].status === "yes") yes.push(text);
+    else if (voteData[userId].status === "no") no.push(text);
     else unknown.push(text);
   }
 
@@ -120,12 +123,13 @@ async function setupRoles(guild) {
   }
 }
 
-// ================= READY =================
-client.once("ready", () => {
-  console.log(`Bot online: ${client.user.tag}`);
+// ================= READY (FIXED) =================
+client.once("clientReady", (client) => {
+  console.log(`🤖 Bot đã online: ${client.user.tag}`);
+  console.log(`📡 Server: ${client.guilds.cache.size}`);
 });
 
-// ================= INTERACTIONS =================
+// ================= MAIN =================
 client.on("interactionCreate", async interaction => {
 
   const guild = interaction.guild;
@@ -133,6 +137,7 @@ client.on("interactionCreate", async interaction => {
 
   // ===== SETUP =====
   if (interaction.isChatInputCommand() && interaction.commandName === "setup") {
+
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return interaction.reply({ content: "❌ Không có quyền", ephemeral: true });
     }
@@ -184,7 +189,7 @@ client.on("interactionCreate", async interaction => {
     });
   }
 
-  // ===== BUTTON =====
+  // ===== BUTTON HANDLER =====
   if (interaction.isButton()) {
 
     await interaction.deferUpdate();
@@ -196,6 +201,7 @@ client.on("interactionCreate", async interaction => {
       const roleName = interaction.customId.replace("phai_", "");
 
       setImmediate(async () => {
+
         for (let r of Object.keys(roleIcons)) {
           const role = guild.roles.cache.find(x => x.name === r);
           if (role) await member.roles.remove(role).catch(() => {});
@@ -212,19 +218,19 @@ client.on("interactionCreate", async interaction => {
       return;
     }
 
-    // ===== COLOR =====
+    // ===== MÀU =====
     if (interaction.customId.startsWith("color_")) {
       const colorName = interaction.customId.replace("color_", "");
 
       setImmediate(async () => {
 
-        // remove old color
+        // remove old color roles
         for (let r of Object.keys(colorRoles)) {
           const role = guild.roles.cache.find(x => x.name === r);
           if (role) await member.roles.remove(role).catch(() => {});
         }
 
-        // add new color
+        // add new color role
         const newRole = guild.roles.cache.find(r => r.name === colorName);
         if (newRole) await member.roles.add(newRole).catch(() => {});
       });
@@ -236,11 +242,11 @@ client.on("interactionCreate", async interaction => {
     if (interaction.customId.startsWith("vote_")) {
       const status = interaction.customId.split("_")[1];
       const msgId = interaction.message.id;
-      const vote = voteMessages[msgId];
-      if (!vote) return;
 
-      setImmediate(async () => {
-        vote.data[userId] = {
+      if (!voteMessages[msgId]) return;
+
+      setImmediate(() => {
+        voteMessages[msgId].data[userId] = {
           status
         };
       });
