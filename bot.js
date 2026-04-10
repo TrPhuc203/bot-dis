@@ -14,7 +14,7 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// ================= EMOJI PHÁI (FIX CHUẨN DISCORD) =================
+// ================= EMOJI PHÁI =================
 const roleIcons = {
   "Thần Tương": "<:thantuong:1492043620147265589>",
   "Cửu Linh": "<:cuulinh:1492043735041573025>",
@@ -107,7 +107,7 @@ async function buildVoteEmbed(guild, voteData, content) {
     .setFooter({ text: `Tổng người vote: ${Object.keys(voteData).length}` });
 }
 
-// ================= READY (FIX ĐÚNG) =================
+// ================= READY =================
 client.once("ready", () => {
   console.log(`Bot online: ${client.user.tag}`);
 });
@@ -191,7 +191,8 @@ client.on("interactionCreate", async interaction => {
     const buttons = Object.keys(roleIcons).map(name =>
       new ButtonBuilder()
         .setCustomId(`phai_${name}`)
-        .setLabel(`${name}`)
+        .setLabel(name)
+        .setEmoji(roleIcons[name]) // ✅ CÁCH 1 CỦA BẠN
         .setStyle(ButtonStyle.Primary)
     );
 
@@ -235,7 +236,6 @@ client.on("interactionCreate", async interaction => {
 
     interaction.deleteReply().catch(() => {});
 
-    // disable sau thời gian
     setTimeout(async () => {
       try {
         const message = await interaction.channel.messages.fetch(msg.id);
@@ -271,7 +271,6 @@ client.on("interactionCreate", async interaction => {
       setImmediate(async () => {
         try {
 
-          // remove old roles
           for (let r in roleIcons) {
             const oldRole = guild.roles.cache.find(x => x.name === r);
             if (oldRole && member.roles.cache.has(oldRole.id)) {
@@ -281,7 +280,6 @@ client.on("interactionCreate", async interaction => {
             phaiData[r] = (phaiData[r] || []).filter(id => id !== userId);
           }
 
-          // add new role
           const newRole = guild.roles.cache.find(r => r.name === roleName);
           if (newRole) await member.roles.add(newRole).catch(() => {});
 
@@ -290,7 +288,6 @@ client.on("interactionCreate", async interaction => {
 
           await updatePhai(interaction.channel, guild);
 
-          // update votes
           for (let msgId in voteMessages) {
             const vote = voteMessages[msgId];
             if (vote.data[userId]) vote.data[userId].role = roleName;
